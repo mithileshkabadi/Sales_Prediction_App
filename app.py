@@ -72,10 +72,6 @@ st.title("Sales Revenue Prediction Dashboard")
 
 """
 ### One-Year Trend Forecast
-
-This example shows how you might generate a *monthly* forecast for the next 12 months, 
-assuming you have some idea of how your inputs (Unit Price, Quantity, etc.) 
-will evolve over time.
 """
 
 # --- User inputs for the "base" scenario ---
