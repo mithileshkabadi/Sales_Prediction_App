@@ -11,79 +11,129 @@ import streamlit as st
 import pickle
 import numpy as np
 import pandas as pd
+from datetime import datetime
+from datetime import timedelta
+
+# ========== Utility function for one-hot encoding & prediction ==========
+
+def predict_total_price(
+    model,
+    unit_price,
+    quantity,
+    shipping_fee,
+    category,
+    region,
+    shipping_status
+):
+    """
+    One function to handle the one-hot encoding and call the model's predict().
+    Returns the predicted total price as a float.
+    """
+    # One-hot encode categories as in your training
+    category_encoded = [
+        1 if category == "Electronics" else 0,
+        1 if category == "Accessories" else 0,
+        1 if category == "Wearables" else 0,
+        1 if category == "Unknown" else 0
+    ]
+
+    region_encoded = [
+        1 if region == "North" else 0,
+        1 if region == "South" else 0,
+        1 if region == "East" else 0,
+        1 if region == "West" else 0,
+        1 if region == "Unknown" else 0
+    ]
+
+    shipping_status_encoded = [
+        1 if shipping_status == "Pending" else 0,
+        1 if shipping_status == "Delivered" else 0,
+        1 if shipping_status == "Returned" else 0,
+        1 if shipping_status == "Unknown" else 0
+    ]
+
+    # Combine into a single numpy array for the model
+    input_data = np.array([[unit_price, quantity, shipping_fee] +
+                           category_encoded +
+                           region_encoded +
+                           shipping_status_encoded])
+
+    # Predict
+    prediction = model.predict(input_data)[0]
+    return float(prediction)
+
+# ========== Streamlit App ==========
 
 # Load the trained model
 with open("xgboost_sales_model.pkl", "rb") as file:
     model = pickle.load(file)
 
-# Initialize or retrieve the predictions DataFrame from session_state
-if "prediction_data" not in st.session_state:
-    st.session_state.prediction_data = pd.DataFrame(columns=["Iteration", "Predicted Price"])
-
 st.title("Sales Revenue Prediction Dashboard")
-st.write("Enter the values to predict revenue.")
 
-# User input fields
-unit_price = st.number_input("Unit Price ($)", min_value=0.0, value=10.0)
-quantity = st.number_input("Quantity", min_value=1, value=1)
-shipping_fee = st.number_input("Shipping Fee ($)", min_value=0.0, value=5.0)
+"""
+### One-Year Trend Forecast
 
-# Categorical inputs
+This example shows how you might generate a *monthly* forecast for the next 12 months, 
+assuming you have some idea of how your inputs (Unit Price, Quantity, etc.) 
+will evolve over time.
+"""
+
+# --- User inputs for the "base" scenario ---
+unit_price = st.number_input("Base Unit Price ($)", min_value=0.0, value=30.0)
+quantity = st.number_input("Base Quantity", min_value=1, value=10)
+shipping_fee = st.number_input("Base Shipping Fee ($)", min_value=0.0, value=5.0)
+
 category = st.selectbox("Product Category", ["Electronics", "Accessories", "Wearables", "Unknown"])
 region = st.selectbox("Region", ["North", "South", "East", "West", "Unknown"])
 shipping_status = st.selectbox("Shipping Status", ["Pending", "Delivered", "Returned", "Unknown"])
 
-# One-hot encode categories
-category_encoded = [
-    1 if category == "Electronics" else 0, 
-    1 if category == "Accessories" else 0,  
-    1 if category == "Wearables" else 0,  
-    1 if category == "Unknown" else 0  
-]
+# --- How we simulate changes over 12 months ---
+st.write("#### Simulation Assumptions")
+st.write("Below is a simple example of how you might *simulate* monthly changes. You can adjust this logic to match your real-world scenario.")
 
-region_encoded = [
-    1 if region == "North" else 0, 
-    1 if region == "South" else 0, 
-    1 if region == "East" else 0, 
-    1 if region == "West" else 0,  
-    1 if region == "Unknown" else 0  
-]
+monthly_quantity_increase = st.number_input("Monthly increase in Quantity", min_value=0, value=5)
+monthly_unit_price_change = st.number_input("Monthly change in Unit Price ($)", min_value=-10.0, value=0.0, step=1.0)
+monthly_shipping_fee_change = st.number_input("Monthly change in Shipping Fee ($)", min_value=-5.0, value=0.0, step=1.0)
 
-shipping_status_encoded = [
-    1 if shipping_status == "Pending" else 0, 
-    1 if shipping_status == "Delivered" else 0,  
-    1 if shipping_status == "Returned" else 0,  
-    1 if shipping_status == "Unknown" else 0  
-]
+if st.button("Generate 1-Year Trend"):
+    # Create a date range for 12 months starting from today
+    start_date = datetime.now()
+    dates = [start_date + pd.DateOffset(months=i) for i in range(12)]
 
-if st.button("Predict Revenue"):
-    # Prepare input
-    input_data = np.array([[unit_price, quantity, shipping_fee] 
-                           + category_encoded 
-                           + region_encoded 
-                           + shipping_status_encoded])
-    # Predict
-    prediction = model.predict(input_data)[0]
-    st.success(f"Predicted Total Price: ${prediction:.2f}")
+    # For each month, calculate predicted price
+    predictions = []
+    for i, d in enumerate(dates):
+        # Example logic: each month, quantity and fees increase (or decrease) by user-specified amounts
+        current_quantity = quantity + i * monthly_quantity_increase
+        current_unit_price = unit_price + i * monthly_unit_price_change
+        current_shipping_fee = shipping_fee + i * monthly_shipping_fee_change
 
-    # Save the prediction to session state
-    next_iteration = len(st.session_state.prediction_data) + 1
-    new_row = pd.DataFrame({
-        "Iteration": [next_iteration], 
-        "Predicted Price": [prediction]
-    })
+        # Get predicted price
+        pred_price = predict_total_price(
+            model=model,
+            unit_price=current_unit_price,
+            quantity=current_quantity,
+            shipping_fee=current_shipping_fee,
+            category=category,
+            region=region,
+            shipping_status=shipping_status
+        )
+
+        predictions.append({
+            "Month": d.strftime("%Y-%m"),  # e.g. "2025-03"
+            "Predicted Price": pred_price
+        })
+
+    # Convert to DataFrame
+    df_predictions = pd.DataFrame(predictions)
     
-    # Use pd.concat instead of append
-    st.session_state.prediction_data = pd.concat(
-        [st.session_state.prediction_data, new_row],
-        ignore_index=True
-    )
+    # Display table
+    st.write("#### Monthly Predictions")
+    st.dataframe(df_predictions)
 
-    # Show a trend chart
-    st.line_chart(
-        data=st.session_state.prediction_data.set_index("Iteration")["Predicted Price"],
-        height=300
-    )
+    # Line chart (use Month as the x-axis)
+    # Convert Month to an actual date for plotting
+    df_predictions["Date"] = pd.to_datetime(df_predictions["Month"])
+    df_predictions = df_predictions.set_index("Date")
 
-
-
+    st.line_chart(df_predictions["Predicted Price"], height=400)
