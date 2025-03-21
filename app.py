@@ -10,10 +10,16 @@ Original file is located at
 import streamlit as st
 import pickle
 import numpy as np
+import pandas as pd  # <-- Import pandas for storing prediction history
 
 # Load the trained model
 with open("xgboost_sales_model.pkl", "rb") as file:
     model = pickle.load(file)
+
+# Initialize or retrieve the predictions DataFrame from session_state
+# This DataFrame will store each prediction so we can display a trend chart
+if "prediction_data" not in st.session_state:
+    st.session_state.prediction_data = pd.DataFrame(columns=["Iteration", "Predicted Price"])
 
 # Streamlit UI
 st.title("Sales Revenue Prediction Dashboard")
@@ -29,7 +35,7 @@ category = st.selectbox("Product Category", ["Electronics", "Accessories", "Wear
 region = st.selectbox("Region", ["North", "South", "East", "West", "Unknown"])
 shipping_status = st.selectbox("Shipping Status", ["Pending", "Delivered", "Returned", "Unknown"])
 
-# ✅ One-hot encode categories exactly as done in training
+# One-hot encode categories exactly as done in training
 category_encoded = [
     1 if category == "Electronics" else 0, 
     1 if category == "Accessories" else 0,  
@@ -54,11 +60,27 @@ shipping_status_encoded = [
 
 # Button to predict revenue
 if st.button("Predict Revenue"):
-    # ✅ Ensure total input features = model's expected input shape
-    input_data = np.array([[unit_price, quantity, shipping_fee] + category_encoded + region_encoded + shipping_status_encoded])
+    # Prepare input for model
+    input_data = np.array([[unit_price, quantity, shipping_fee] 
+                           + category_encoded 
+                           + region_encoded 
+                           + shipping_status_encoded])
 
     # Predict
     prediction = model.predict(input_data)[0]
 
     # Show prediction
     st.success(f"Predicted Total Price: ${prediction:.2f}")
+
+    # Add this prediction to our session DataFrame
+    next_iteration = len(st.session_state.prediction_data) + 1
+    new_row = {"Iteration": next_iteration, "Predicted Price": prediction}
+    st.session_state.prediction_data = st.session_state.prediction_data.append(new_row, ignore_index=True)
+
+    # Show the trend chart
+    st.line_chart(
+        data=st.session_state.prediction_data.set_index("Iteration")["Predicted Price"],
+        height=300
+    )
+
+
