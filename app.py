@@ -88,8 +88,6 @@ region = st.selectbox("Region", ["North", "South", "East", "West", "Unknown"])
 shipping_status = st.selectbox("Shipping Status", ["Pending", "Delivered", "Returned", "Unknown"])
 
 # --- How we simulate changes over 12 months ---
-st.write("#### Simulation Assumptions")
-st.write("Below is a simple example of how you might *simulate* monthly changes. You can adjust this logic to match your real-world scenario.")
 
 monthly_quantity_increase = st.number_input("Monthly increase in Quantity", min_value=0, value=5)
 monthly_unit_price_change = st.number_input("Monthly change in Unit Price ($)", min_value=-10.0, value=0.0, step=1.0)
